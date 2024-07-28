@@ -1,0 +1,6 @@
+#ifndef ENUM_FACILITY_STATUS_H
+#define ENUM_FACILITY_STATUS_H
+
+enum class EnumFacilityStatus { FREE, BLOCKED, PLAYER_A, PLAYER_B };
+
+#endif // ENUM_FACILITY_STATUS_H

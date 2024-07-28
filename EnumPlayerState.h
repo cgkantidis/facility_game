@@ -1,0 +1,12 @@
+#ifndef ENUM_PLAYER_STATE_H
+#define ENUM_PLAYER_STATE_H
+
+enum class EnumPlayerState {
+  UNINIT,
+  STARTING,
+  WAITING_FOR_ME,
+  WAITING_FOR_OPPONENT,
+  TERMINATING
+};
+
+#endif // ENUM_PLAYER_STATE_H
