@@ -25,11 +25,16 @@ private:
   time_point_t m_start_time{};
   time_point_t m_last_info_time{};
   time_point_t m_last_warn_time{};
-  std::mutex m_mtx;
+  mutable std::mutex m_mtx;
 
   [[nodiscard]] EnumPlayerState get_state() const {
     std::scoped_lock sl(m_mtx);
     return m_player_state;
+  }
+
+  [[nodiscard]] bool get_stop() const {
+    std::scoped_lock sl(m_mtx);
+    return m_stop_received;
   }
 
   void check_progress() {
@@ -43,9 +48,10 @@ private:
       fmt::println(
           "Monitor WARN: round:{}, player in state {} for {} sec",
           m_game_round,
-          m_player_state,
+          player_state_to_str(m_player_state),
           std::chrono::duration_cast<std::chrono::seconds>(
-              dur_since_last_change));
+              dur_since_last_change)
+              .count());
       m_last_warn_time = current_time;
     }
   }
@@ -58,11 +64,6 @@ private:
       fmt::println("Monitor INFO: round:{}", m_game_round);
       m_last_info_time = current_time;
     }
-  }
-
-  [[nodiscard]] bool get_stop() const {
-    std::scoped_lock sl(m_mtx);
-    return m_stop_received;
   }
 
 public:
@@ -87,7 +88,8 @@ public:
     fmt::println(
         "Monitor LOG: round:{}, gametime:{} sec, message:{}",
         m_game_round,
-        std::chrono::duration_cast<std::chrono::seconds>(dur_since_start),
+        std::chrono::duration_cast<std::chrono::seconds>(dur_since_start)
+            .count(),
         message);
   }
 

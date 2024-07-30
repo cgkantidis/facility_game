@@ -9,4 +9,6 @@ enum class EnumPlayerState {
   TERMINATING
 };
 
+char const *player_state_to_str(EnumPlayerState player_state);
+
 #endif // ENUM_PLAYER_STATE_H

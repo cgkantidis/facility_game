@@ -2,7 +2,6 @@
 #define ENUM_PLAYER_TYPE_H
 
 #include <fmt/core.h>
-#include <string>
 
 enum class EnumPlayerType {
   FPLAYER_SIMPLE_1,

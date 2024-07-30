@@ -179,7 +179,7 @@ public:
     }
 
     // add my last move to the Vector with my moves so far
-    append_my_move(my_move);
+    m_my_moves_so_far.emplace_back(my_move.index);
 
     // if the current move is the one that I got from memory, remove it from
     // memory
@@ -213,11 +213,11 @@ public:
     std::size_t a{0};
     std::size_t b{0};
     std::size_t c{0};
-    static constexpr auto free = EnumFacilityStatus::FREE;
+    static constexpr auto FREE = EnumFacilityStatus::FREE;
 
     for (std::size_t i = 0; i < m_num_nodes - 4; i++) {
-      if (game->get_status(i) == free && game->get_status(i + 2) == free
-          && game->get_status(i + 4) == free) {
+      if (game->get_status(i) == FREE && game->get_status(i + 2) == FREE
+          && game->get_status(i + 4) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 2] + m_nodes[i + 4];
         if (sum > max_sum) {
           is_valid = true;
@@ -230,8 +230,8 @@ public:
     }
 
     for (std::size_t i = 0; i < m_num_nodes - 5; i++) {
-      if (game->get_status(i) == free && game->get_status(i + 2) == free
-          && game->get_status(i + 5) == free) {
+      if (game->get_status(i) == FREE && game->get_status(i + 2) == FREE
+          && game->get_status(i + 5) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 2] + m_nodes[i + 5];
         if (sum > max_sum) {
           is_valid = true;
@@ -244,8 +244,8 @@ public:
     }
 
     for (std::size_t i = 0; i < m_num_nodes - 5; i++) {
-      if (game->get_status(i) == free && game->get_status(i + 3) == free
-          && game->get_status(i + 5) == free) {
+      if (game->get_status(i) == FREE && game->get_status(i + 3) == FREE
+          && game->get_status(i + 5) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 3] + m_nodes[i + 5];
         if (sum > max_sum) {
           is_valid = true;
@@ -258,8 +258,8 @@ public:
     }
 
     for (std::size_t i = 0; i < m_num_nodes - 6; i++) {
-      if (game->get_status(i) == free && game->get_status(i + 3) == free
-          && game->get_status(i + 6) == free) {
+      if (game->get_status(i) == FREE && game->get_status(i + 3) == FREE
+          && game->get_status(i + 6) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 3] + m_nodes[i + 6];
         if (sum > max_sum) {
           max_sum = sum;
@@ -300,105 +300,105 @@ public:
 
   std::pair<bool, Move> inc_best_triplet_by_edges(
       FacilityGameAPI const *game,
-      std::vector<std::size_t> &movesSoFar) {
-    int i = 1;
-    int first = movesSoFar.get(0);
-    int last = 0;
-    int continuous = 1;
-    Pair tmpPair;
-    Pair toReturn = new Pair(-1, 0);
+      std::vector<std::size_t> const &moves_so_far) {
+    std::size_t move_idx = 1;
+    std::size_t first = moves_so_far[0];
+    std::size_t continuous = 1;
 
-    while (i < movesSoFar.size()) {
-      if (movesSoFar.get(i) - movesSoFar.get(i - 1) <= 3) {
+    bool is_valid = false;
+    Move rtn_move{0, 0};
+
+    while (move_idx < moves_so_far.size()) {
+      if (moves_so_far[move_idx] - moves_so_far[move_idx - 1] <= 3) {
         continuous++;
       } else {
-        last = movesSoFar.get(i - 1);
         if (continuous >= 2) {
-          tmpPair = computePointsForEdges(game, first, last, continuous);
-          if (tmpPair.value > toReturn.value) {
-            toReturn = new Pair(tmpPair.index, tmpPair.value);
+          std::size_t last = moves_so_far[move_idx - 1];
+          auto [tmp_valid, tmp_move] =
+              computePointsForEdges(game, first, last, continuous);
+          if (tmp_valid && tmp_move.value > rtn_move.value) {
+            is_valid = true;
+            rtn_move = tmp_move;
           }
         }
-        first = movesSoFar.get(i);
+        first = moves_so_far[move_idx];
         continuous = 1;
       }
-      i++;
+      move_idx++;
     }
     if (continuous >= 2) {
-      last = movesSoFar.get(i - 1);
-      tmpPair = computePointsForEdges(game, first, last, continuous);
-      if (tmpPair.value > toReturn.value) {
-        toReturn = new Pair(tmpPair.index, tmpPair.value);
+      std::size_t last = moves_so_far[move_idx - 1];
+      auto [tmp_valid, tmp_move] =
+          computePointsForEdges(game, first, last, continuous);
+      if (tmp_valid && tmp_move.value > rtn_move.value) {
+        is_valid = true;
+        rtn_move = tmp_move;
       }
     }
 
-    return toReturn;
+    return {is_valid, rtn_move};
   }
 
-  /**
-   * Calculates the points that will be gained by incrementing a team of nodes
-   * by choosing one of the nodes at the edges of the team
-   *
-   * @param game
-   *            the facility game instance
-   * @param first
-   *            the left-most node of the team
-   * @param last
-   *            the right-most node of the team
-   * @param continuous
-   *            the number of nodes in the team
-   */
   std::pair<bool, Move> computePointsForEdges(
       FacilityGameAPI const *game,
       std::size_t first,
       std::size_t last,
       std::size_t continuous) {
     std::size_t points;
+    static constexpr auto FREE = EnumFacilityStatus::FREE;
+
+    bool is_valid = false;
+    Move rtn_move{0, 0};
+
     // checks if it can make or increment a triplet by adding to the left
     // of the left-most node
-    if (first >= 2 && game->get_status(first - 2) == free) {
+    if (first >= 2 && game->get_status(first - 2) == FREE) {
       if (continuous == 2) {
-        points = 3 * (nodes[first - 2] + nodes[first] + nodes[last]);
+        points = 3 * (m_nodes[first - 2] + m_nodes[first] + m_nodes[last]);
       } else {
-        points = 3 * nodes[first - 2];
+        points = 3 * m_nodes[first - 2];
       }
-      if (points > toReturn.value) {
-        toReturn = new Pair(first - 2, points);
+      if (points > rtn_move.value) {
+        is_valid = true;
+        rtn_move = {first - 2, points};
       }
     }
-    if (first >= 3 && game->get_status(first - 3) == free) {
+    if (first >= 3 && game->get_status(first - 3) == FREE) {
       if (continuous == 2) {
-        points = 3 * (nodes[first - 3] + nodes[first] + nodes[last]);
+        points = 3 * (m_nodes[first - 3] + m_nodes[first] + m_nodes[last]);
       } else {
-        points = 3 * nodes[first - 3];
+        points = 3 * m_nodes[first - 3];
       }
-      if (points > toReturn.value) {
-        toReturn = new Pair(first - 3, points);
+      if (points > rtn_move.value) {
+        is_valid = true;
+        rtn_move = {first - 3, points};
       }
     }
     // checks if it can make or increment a triplet by adding to the right
     // of the right-most node
-    if (last <= n - 3 && game->get_status(last + 2) == free) {
+    if (last <= m_num_nodes - 3 && game->get_status(last + 2) == FREE) {
       if (continuous == 2) {
-        points = 3 * (nodes[first] + nodes[last] + nodes[last + 2]);
+        points = 3 * (m_nodes[first] + m_nodes[last] + m_nodes[last + 2]);
       } else {
-        points = 3 * nodes[last + 2];
+        points = 3 * m_nodes[last + 2];
       }
-      if (points > toReturn.value) {
-        toReturn = new Pair(last + 2, points);
+      if (points > rtn_move.value) {
+        is_valid = true;
+        rtn_move = {last + 2, points};
       }
     }
-    if (last <= n - 4 && game->get_status(last + 3) == free) {
+    if (last <= m_num_nodes - 4 && game->get_status(last + 3) == FREE) {
       if (continuous == 2) {
-        points = 3 * (nodes[first] + nodes[last] + nodes[last + 3]);
+        points = 3 * (m_nodes[first] + m_nodes[last] + m_nodes[last + 3]);
       } else {
-        points = 3 * nodes[last + 3];
+        points = 3 * m_nodes[last + 3];
       }
-      if (points > toReturn.value) {
-        toReturn = new Pair(last + 3, points);
+      if (points > rtn_move.value) {
+        is_valid = true;
+        rtn_move = {last + 3, points};
       }
     }
-    return {false, {0, 0}};
+    return {is_valid, rtn_move};
   }
 
   /**
@@ -416,27 +416,26 @@ public:
    */
   std::pair<bool, Move> inc_best_triplet_by_middle(
       FacilityGameAPI const *game,
-      std::vector<std::size_t> &movesSoFar) {
-    int i = 1;
-    int first;
-    int last;
-    Pair tmpPair;
-    Pair toReturn = new Pair(-1, 0);
+      std::vector<std::size_t> const &moves_so_far) {
+    std::size_t i = 1;
+    bool is_valid = false;
+    Move rtn_move{0, 0};
 
-    while (i < movesSoFar.size()) {
-      int space = movesSoFar.get(i) - movesSoFar.get(i - 1);
+    while (i < moves_so_far.size()) {
+      std::size_t space = moves_so_far[i] - moves_so_far[i - 1];
       if (space >= 4 && space <= 6) {
-        first = movesSoFar.get(i - 1);
-        last = movesSoFar.get(i);
-        tmpPair = computePointsForMiddle(game, first, last);
-        if (tmpPair.value > toReturn.value) {
-          toReturn = new Pair(tmpPair.index, tmpPair.value);
+        std::size_t first = moves_so_far[i - 1];
+        std::size_t last = moves_so_far[i];
+        auto [tmp_valid, tmp_move] = computePointsForMiddle(game, first, last);
+        if (tmp_valid && tmp_move.value > rtn_move.value) {
+          is_valid = true;
+          rtn_move = tmp_move;
         }
       }
       i++;
     }
 
-    return toReturn;
+    return {is_valid, rtn_move};
   }
 
   /**
@@ -450,81 +449,82 @@ public:
    * @param last
    *            the left-most node of the right team of nodes
    */
-  std::pair<bool, Move>
-  computePointsForMiddle(FacilityGameAPI game, int first, int last) {
-    int points = 0;
-    int move = -1;
+  std::pair<bool, Move> computePointsForMiddle(
+      FacilityGameAPI const *game,
+      std::size_t first,
+      std::size_t last) {
+    static constexpr auto FREE = EnumFacilityStatus::FREE;
+
+    bool is_valid = false;
+    Move rtn_move{0, 0};
     // if there is one free node between the two teams I can select only the
     // middle one
-    if (last - first == 4 && game->get_status(first + 2) == free) {
-      move = first + 2;
-      points = 3 * (nodes[first] + nodes[move] + nodes[last]);
+    if (last - first == 4 && game->get_status(first + 2) == FREE) {
+      is_valid = true;
+      rtn_move = {
+          first + 2,
+          3 * (m_nodes[first] + m_nodes[first + 2] + m_nodes[last])};
     }
-    // if there are two free nodes between the two teams I can create a new
+    // if there are two FREE m_nodes between the two teams I can create a new
     // bigger team by selecting anyone of them, so I select the one with the
     // highest value
     else if (last - first == 5) {
-      // if both free, select the one with the highest value
-      if (game->get_status(first + 2) == free
-          && game->get_status(first + 3) == free) {
-        if (nodes[first + 2] > nodes[first + 3]) {
-          move = first + 2;
+      // if both FREE, select the one with the highest value
+      if (game->get_status(first + 2) == FREE
+          && game->get_status(first + 3) == FREE) {
+        is_valid = true;
+        if (m_nodes[first + 2] > m_nodes[first + 3]) {
+          rtn_move.index = first + 2;
         } else {
-          move = first + 3;
+          rtn_move.index = first + 3;
         }
       }
-      // else select the one who is free (if any)
-      else if (game->get_status(first + 2) == free) {
-        move = first + 2;
-      } else if (game->get_status(first + 3) == free) {
-        move = first + 3;
+      // else select the one who is FREE (if any)
+      else if (game->get_status(first + 2) == FREE) {
+        is_valid = true;
+        rtn_move.index = first + 2;
+      } else if (game->get_status(first + 3) == FREE) {
+        is_valid = true;
+        rtn_move.index = first + 3;
       }
 
-      if (move != -1) {
-        points = 3 * (nodes[first] + nodes[move] + nodes[last]);
+      if (is_valid) {
+        rtn_move.value =
+            3 * (m_nodes[first] + m_nodes[rtn_move.index] + m_nodes[last]);
       }
     }
-    // if there are three free nodes between the two teams, I can either
+    // if there are three FREE m_nodes between the two teams, I can either
     // select the middle one and combine the two teams, or select the left
     // or right and combine the two teams on the next round
-    // the left/right nodes are computed with a weight in their points
+    // the left/right m_nodes are computed with a weight in their points
     // because of the probability that one of them might be taken by the
     // opponent
     else if (last - first == 6) {
-      int maxPoints = 0;
-      if (game->get_status(first + 2) == free
-          && game->get_status(first + 4) == free) {
-        if (nodes[first + 2] > nodes[first + 4]) {
-          move = first + 2;
+      if (game->get_status(first + 2) == FREE
+          && game->get_status(first + 4) == FREE) {
+        is_valid = true;
+        if (m_nodes[first + 2] > m_nodes[first + 4]) {
+          rtn_move.index = first + 2;
         } else {
-          move = first + 4;
+          rtn_move.index = first + 4;
         }
 
-        maxPoints = (int)Math.floor(
+        rtn_move.value = static_cast<std::size_t>(
             0.8
-            * (2 * nodes[first] + 3 * nodes[first + 2] + 3 * nodes[first + 4]
-               + 2 * nodes[last]));
+            * static_cast<double>(
+                (2 * m_nodes[first] + 3 * m_nodes[first + 2]
+                 + 3 * m_nodes[first + 4] + 2 * m_nodes[last])));
       }
-      if (game->get_status(first + 3) == free) {
-        int tempPoints = 3 * (nodes[first] + nodes[first + 3] + nodes[last]);
-        if (tempPoints >= maxPoints) {
-          move = first + 3;
-          maxPoints = tempPoints;
+      if (game->get_status(first + 3) == FREE) {
+        std::size_t tmp_points =
+            3 * (m_nodes[first] + m_nodes[first + 3] + m_nodes[last]);
+        if (!is_valid || tmp_points >= rtn_move.value) {
+          is_valid = true;
+          rtn_move = {first + 3, tmp_points};
         }
       }
-      points = maxPoints;
     }
-    return new Pair(move, points);
-  }
-
-  void append_my_move(Move my_move) {
-    m_my_moves_so_far.push_back(my_move);
-    std::ranges::push_heap(m_my_moves_so_far);
-  }
-
-  void append_vs_move(Move vs_move) {
-    m_my_moves_so_far.push_back(vs_move);
-    std::ranges::push_heap(m_vs_moves_so_far);
+    return {is_valid, rtn_move};
   }
 };
 

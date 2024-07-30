@@ -5,8 +5,8 @@
 
 class GameScore {
 public:
-  int m_playerA{};
-  int m_playerB{};
+  std::size_t m_playerA{};
+  std::size_t m_playerB{};
 
   std::string toString() {
     return fmt::format(

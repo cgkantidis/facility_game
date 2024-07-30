@@ -10,6 +10,7 @@
 #include "FPlayerSimple1.h"
 #include "FPlayerSimple2.h"
 #include "FPlayerSlow.h"
+#include "FacilityGame.h"
 #include "FacilityGameAPI.h"
 #include "FacilityGameException.h"
 #include "Finals.h"
@@ -22,17 +23,19 @@ constexpr EnumPlayerType DEFAULT_PLAYER_TYPE = EnumPlayerType::FPLAYER_SIMPLE_1;
 constexpr bool DEFAULT_VERBOSE = false;
 
 int main(int argc, char const **argv) {
-  EnumPlayerType const player_type_A = (argc > 1) ? str_to_player_type(argv[1]) : DEFAULT_PLAYER_TYPE;
-  EnumPlayerType const player_type_B = (argc > 2) ? str_to_player_type(argv[2]) : DEFAULT_PLAYER_TYPE;
-  bool const verbose = (argc > 3) ? std::atoi(argv[3]) != 0 : DEFAULT_VERBOSE;
+  // EnumPlayerType const player_type_A = (argc > 1) ?
+  // str_to_player_type(argv[1]) : DEFAULT_PLAYER_TYPE; EnumPlayerType const
+  // player_type_B = (argc > 2) ? str_to_player_type(argv[2]) :
+  // DEFAULT_PLAYER_TYPE; bool const verbose = (argc > 3) ? std::atoi(argv[3])
+  // != 0 : DEFAULT_VERBOSE;
 
-  FPlayer *player_A = create(EnumPlayer::PLAYER_A, player_type_A);
-  FPlayer *player_B = create(EnumPlayer::PLAYER_B, player_type_B);
+  // FPlayer *player_A = create(EnumPlayer::PLAYER_A, player_type_A);
+  // FPlayer *player_B = create(EnumPlayer::PLAYER_B, player_type_B);
 
-  fmt::println(
-      "Starting game of {} VS {}",
-      player_type_to_str(player_type_A),
-      player_type_to_str(player_type_B));
+  // fmt::println(
+  //     "Starting game of {} VS {}",
+  //     player_type_to_str(player_type_A),
+  //     player_type_to_str(player_type_B));
 
   return 0;
 }
@@ -48,12 +51,12 @@ int main(int argc, char const **argv) {
 //  // print roles
 //  server.printRoles();
 //} catch (FacilityGameException e) {
-//System.err.println(e);
+// System.err.println(e);
 //
 //}
 //}
 //
-//public class FServer {
+// public class FServer {
 //  int port; // TCP port for accepting the socket connection
 //  FPlayer serverPlayer; // The player object for FServer
 //  EnumPlayerType playerType;
@@ -240,5 +243,3 @@ int main(int argc, char const **argv) {
 //  }
 //
 //}
-
-

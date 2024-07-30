@@ -6,7 +6,7 @@ project(
   LANGUAGES CXX)
 
 # set the C++ standard
-set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD 23)
 
 # generate the compile_commands.json
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -126,7 +126,7 @@ find_package(fmt REQUIRED)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-add_executable(facility_game facility_game.cpp)
+add_executable(facility_game facility_game.cpp EnumPlayerState.cpp EnumPlayerType.cpp)
 
 target_link_libraries(facility_game PRIVATE fmt::fmt)
 
