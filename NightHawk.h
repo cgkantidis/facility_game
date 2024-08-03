@@ -460,27 +460,30 @@ public:
     // because of the probability that one of them might be taken by the
     // opponent
     else if (last - first == 6) {
-      if (game.get_status(first + 2) == FREE
-          && game.get_status(first + 4) == FREE) {
-        is_valid = true;
-        if (m_nodes[first + 2] > m_nodes[first + 4]) {
-          rtn_move.index = first + 2;
-        } else {
-          rtn_move.index = first + 4;
-        }
-
-        rtn_move.value = static_cast<std::size_t>(
-            0.8
-            * static_cast<double>(
-                (2 * m_nodes[first] + 3 * m_nodes[first + 2]
-                 + 3 * m_nodes[first + 4] + 2 * m_nodes[last])));
-      }
       if (game.get_status(first + 3) == FREE) {
         std::size_t tmp_points =
             2 * m_nodes[first] + 3 * m_nodes[first + 3] + 2 * m_nodes[last];
         if (!is_valid || tmp_points >= rtn_move.value) {
           is_valid = true;
           rtn_move = {first + 3, tmp_points};
+        }
+      }
+      if (game.get_status(first + 2) == FREE
+          && game.get_status(first + 4) == FREE) {
+
+        auto tmp_points = static_cast<std::size_t>(
+            0.8
+            * static_cast<double>(
+                (2 * m_nodes[first] + 3 * m_nodes[first + 2]
+                 + 3 * m_nodes[first + 4] + 2 * m_nodes[last])));
+        if (!is_valid || tmp_points >= rtn_move.value) {
+          is_valid = true;
+          if (m_nodes[first + 2] > m_nodes[first + 4]) {
+            rtn_move.index = first + 2;
+          } else {
+            rtn_move.index = first + 4;
+          }
+          rtn_move.value = tmp_points;
         }
       }
     }
