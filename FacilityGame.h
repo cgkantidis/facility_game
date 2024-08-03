@@ -21,8 +21,10 @@ private:
   std::size_t m_seed;
   std::vector<std::size_t> m_nodes;
   std::vector<FacilityStatus> m_statuses;
-  GameScore m_score;
   std::vector<std::size_t> m_moves;
+
+  bool m_is_score_uptodate{};
+  GameScore m_score;
   // player_A plays first, player_B plays second
 
 public:
@@ -61,7 +63,8 @@ public:
     return m_statuses;
   }
 
-  [[nodiscard]] GameScore get_score() const {
+  [[nodiscard]] GameScore get_score() {
+    update_score();
     return m_score;
   }
 
@@ -125,12 +128,22 @@ public:
       }
     }
 
-    update_score(player);
+    m_is_score_uptodate = false;
     return true;
   }
 
 private:
-  void update_score(Player player) {
+  void update_score() {
+    if (m_is_score_uptodate) {
+      return;
+    }
+    for (auto const &player : {Player::PLAYER_A, Player::PLAYER_B}) {
+      m_score.set_score(player, compute_score(player));
+    }
+    m_is_score_uptodate = true;
+  }
+
+  [[nodiscard]] std::size_t compute_score(Player player) const {
     FacilityStatus const search_status = player == Player::PLAYER_A
                                              ? FacilityStatus::PLAYER_A
                                              : FacilityStatus::PLAYER_B;
@@ -160,11 +173,12 @@ private:
       tmp_score *= BONUS_FACTOR;
     }
     score += tmp_score;
-    m_score.set_score(player, score);
+    return score;
   }
 
 public:
-  void print_score() const {
+  void print_score() {
+    update_score();
     fmt::println(
         "SCORE: PLAYER_A:{} PLAYER_B:{}",
         m_score.get_score(Player::PLAYER_A),
@@ -241,7 +255,7 @@ public:
     fmt::println("MOVES: PLAYER_A:{} PLAYER_B:{}", num_moves_A, num_moves_B);
   }
 
-  void print(bool verbose = false) const {
+  void print(bool verbose = false) {
     if (verbose) {
       for (auto [idx, node, status] :
            std::views::zip(std::views::iota(0), m_nodes, m_statuses)) {
