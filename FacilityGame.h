@@ -7,9 +7,9 @@
 #include <ranges>
 #include <utility>
 
-#include "enums.h"
 #include "FacilityGameException.h"
 #include "GameScore.h"
+#include "enums.h"
 
 static constexpr std::size_t MIN_VALUE = 10;
 static constexpr std::size_t MAX_VALUE = 50;
@@ -138,7 +138,10 @@ private:
     std::size_t num_consecutive{0};
     std::size_t score{0};
 
-    for (auto const [status, node] : std::views::zip(m_statuses, m_nodes)) {
+    for (std::size_t idx = 0; idx < m_nodes.size(); ++idx) {
+      auto const &status = m_statuses[idx];
+      auto const &node = m_nodes[idx];
+
       if (status == search_status) {
         ++num_consecutive;
         tmp_score += node;
@@ -178,7 +181,10 @@ public:
       std::size_t num_consecutive{0};
       std::size_t score{0};
 
-      for (auto const [status, node] : std::views::zip(m_statuses, m_nodes)) {
+      for (std::size_t idx = 0; idx < m_nodes.size(); ++idx) {
+        auto const status = m_statuses[idx];
+        auto const node = m_nodes[idx];
+
         if (status == search_status) {
           ++num_consecutive;
           tmp_score += node;

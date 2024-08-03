@@ -20,10 +20,11 @@ public:
   std::size_t next_move(FacilityGame const &game) override {
     std::size_t max_node{};
     std::size_t max_node_idx{};
-    for (auto [idx, node, status] : std::views::zip(
-             std::views::iota(0UL),
-             game.get_nodes(),
-             game.get_statuses())) {
+    auto const &nodes = game.get_nodes();
+    auto const &statuses = game.get_statuses();
+    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+      auto const &status = statuses[idx];
+      auto const &node = nodes[idx];
       if (status == FacilityStatus::FREE && node > max_node) {
         max_node_idx = idx;
         max_node = node;
