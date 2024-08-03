@@ -314,7 +314,7 @@ public:
     // of the left-most node
     if (first >= 2 && game.get_status(first - 2) == FREE) {
       if (continuous == 2) {
-        points = 3 * (m_nodes[first - 2] + m_nodes[first] + m_nodes[last]);
+        points = 3 * m_nodes[first - 2] + 2 * (m_nodes[first] + m_nodes[last]);
       } else {
         points = 3 * m_nodes[first - 2];
       }
@@ -325,7 +325,7 @@ public:
     }
     if (first >= 3 && game.get_status(first - 3) == FREE) {
       if (continuous == 2) {
-        points = 3 * (m_nodes[first - 3] + m_nodes[first] + m_nodes[last]);
+        points = 3 * m_nodes[first - 3] + 2 * (m_nodes[first] + m_nodes[last]);
       } else {
         points = 3 * m_nodes[first - 3];
       }
@@ -338,7 +338,7 @@ public:
     // of the right-most node
     if (last <= m_num_nodes - 3 && game.get_status(last + 2) == FREE) {
       if (continuous == 2) {
-        points = 3 * (m_nodes[first] + m_nodes[last] + m_nodes[last + 2]);
+        points = 2 * (m_nodes[first] + m_nodes[last]) + 3 * m_nodes[last + 2];
       } else {
         points = 3 * m_nodes[last + 2];
       }
@@ -349,7 +349,7 @@ public:
     }
     if (last <= m_num_nodes - 4 && game.get_status(last + 3) == FREE) {
       if (continuous == 2) {
-        points = 3 * (m_nodes[first] + m_nodes[last] + m_nodes[last + 3]);
+        points = 2 * (m_nodes[first] + m_nodes[last]) + 3 * m_nodes[last + 3];
       } else {
         points = 3 * m_nodes[last + 3];
       }
@@ -423,7 +423,7 @@ public:
       is_valid = true;
       rtn_move = {
           first + 2,
-          3 * (m_nodes[first] + m_nodes[first + 2] + m_nodes[last])};
+          2 * m_nodes[first] + 3 * m_nodes[first + 2] + 2 * m_nodes[last]};
     }
     // if there are two FREE m_nodes between the two teams I can create a new
     // bigger team by selecting anyone of them, so I select the one with the
@@ -450,7 +450,7 @@ public:
 
       if (is_valid) {
         rtn_move.value =
-            3 * (m_nodes[first] + m_nodes[rtn_move.index] + m_nodes[last]);
+            2 * m_nodes[first] + 3 * m_nodes[rtn_move.index] + 2 * m_nodes[last];
       }
     }
     // if there are three FREE m_nodes between the two teams, I can either
@@ -477,7 +477,7 @@ public:
       }
       if (game.get_status(first + 3) == FREE) {
         std::size_t tmp_points =
-            3 * (m_nodes[first] + m_nodes[first + 3] + m_nodes[last]);
+            2 * m_nodes[first] + 3 * m_nodes[first + 3] + 2 * m_nodes[last];
         if (!is_valid || tmp_points >= rtn_move.value) {
           is_valid = true;
           rtn_move = {first + 3, tmp_points};

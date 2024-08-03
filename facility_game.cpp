@@ -6,7 +6,8 @@
 #include <utility>
 
 int main() {
-  FacilityGame game(10000, std::random_device()());
+  //FacilityGame game(10000, std::random_device()());
+  FacilityGame game(10000, 0);
 
   std::pair<FPlayerHighest, NightHawk> players{
       Player::PLAYER_A,
@@ -25,8 +26,6 @@ int main() {
     }
     game.append_move(Player::PLAYER_B, players.second.next_move(game));
   }
-  game.print(true);
-  game.print_score_calculation();
-
+  game.print();
   return 0;
 }
