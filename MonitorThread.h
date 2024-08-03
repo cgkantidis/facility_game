@@ -6,7 +6,7 @@
 #include <mutex>
 #include <thread>
 
-#include "EnumPlayerState.h"
+#include "enums.h"
 
 constexpr auto INFO_MESSAGE_DUR = std::chrono::milliseconds(8000);
 constexpr auto WARN_MESSAGE_DUR = std::chrono::milliseconds(10000);
@@ -18,7 +18,7 @@ private:
   using clock_t = std::chrono::steady_clock;
   using time_point_t = std::chrono::time_point<clock_t>;
 
-  EnumPlayerState m_player_state{EnumPlayerState::UNINIT};
+  PlayerState m_player_state{PlayerState::UNINIT};
   bool m_stop_received{};
   int m_game_round{};
   time_point_t m_last_change_time{};
@@ -27,7 +27,7 @@ private:
   time_point_t m_last_warn_time{};
   mutable std::mutex m_mtx;
 
-  [[nodiscard]] EnumPlayerState get_state() const {
+  [[nodiscard]] PlayerState get_state() const {
     std::scoped_lock sl(m_mtx);
     return m_player_state;
   }
@@ -67,7 +67,7 @@ private:
   }
 
 public:
-  void set_state(int game_round, EnumPlayerState player_state) {
+  void set_state(int game_round, PlayerState player_state) {
     std::scoped_lock sl(m_mtx);
     m_game_round = game_round;
     if (m_player_state != player_state) {
@@ -97,7 +97,7 @@ public:
     m_start_time = clock_t::now();
     m_last_info_time = m_start_time;
     m_last_warn_time = m_start_time;
-    while (!get_stop() && get_state() != EnumPlayerState::TERMINATING) {
+    while (!get_stop() && get_state() != PlayerState::TERMINATING) {
       check_progress();
       check_info();
       std::this_thread::sleep_for(CHECK_DUR);

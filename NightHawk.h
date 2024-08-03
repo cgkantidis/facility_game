@@ -5,9 +5,8 @@
 #include <array>
 #include <cmath>
 
-#include "EnumFacilityStatus.h"
 #include "FPlayer.h"
-#include "Node.h"
+#include "FacilityGameException.h"
 
 struct Move {
   std::size_t index;
@@ -19,6 +18,16 @@ struct MoveCmp {
     return m1.value > m2.value || m1.index < m2.index;
   }
 };
+
+struct Node {
+  std::size_t index;
+  std::size_t value;
+
+  std::string toString() {
+    return fmt::format("node[{}] == {}", index, value);
+  }
+};
+
 struct NodeCmp {
   bool operator()(Node const &n1, Node const &n2) {
     return n1.value > n2.value || n1.index < n2.index;
@@ -28,7 +37,6 @@ struct NodeCmp {
 class NightHawk : public FPlayer {
   static constexpr char const *PLAYER_NAME = "NightHawk";
   static constexpr char const *VERSION = "1.0";
-  static constexpr int AFM = 56483;
   static constexpr char const *FIRSTNAME = "Christos";
   static constexpr char const *LASTNAME = "Gkantidis";
 
@@ -37,25 +45,23 @@ private:
   std::vector<std::size_t> m_nodes;
   std::vector<std::size_t> m_my_moves_so_far;
   std::vector<std::size_t> m_vs_moves_so_far;
-  std::vector<Move> m_mem_for_next_move;
   std::vector<Node> m_sorted_nodes;
   std::vector<Node>::iterator m_sorted_nodes_it{};
 
 public:
-  explicit NightHawk(EnumPlayer player)
-      : FPlayer(player, PLAYER_NAME, VERSION, AFM, FIRSTNAME, LASTNAME) {}
+  explicit NightHawk(Player player)
+      : FPlayer(player, PLAYER_NAME, VERSION, FIRSTNAME, LASTNAME) {}
 
-  void initialize(FacilityGameAPI const *game) override {
-    m_num_nodes = game->get_num_nodes();
-    m_nodes = game->get_value_vec();
-    m_my_moves_so_far.reserve(m_num_nodes / 3);
-    m_vs_moves_so_far.reserve(m_num_nodes / 3);
-    m_mem_for_next_move.reserve(3);
+  void initialize(FacilityGame const &game) override {
+    m_num_nodes = game.get_num_nodes();
+    m_nodes = game.get_nodes();
+    m_my_moves_so_far.reserve(m_num_nodes);
+    m_vs_moves_so_far.reserve(m_num_nodes);
     m_sorted_nodes.reserve(m_num_nodes);
     m_sorted_nodes_it = m_sorted_nodes.begin();
 
     for (std::size_t idx = 0; idx < m_num_nodes; ++idx) {
-      m_sorted_nodes[idx] = {idx, m_nodes[idx]};
+      m_sorted_nodes.emplace_back(idx, m_nodes[idx]);
     }
     std::ranges::stable_sort(
         m_sorted_nodes,
@@ -64,51 +70,22 @@ public:
         });
   }
 
-  std::size_t next_move(FacilityGameAPI const *game) override {
+  static void append_move(std::vector<std::size_t> &moves, std::size_t idx) {
+    auto it = std::lower_bound(moves.begin(), moves.end(), idx);
+    moves.insert(it, idx);
+  }
+
+  std::size_t next_move(FacilityGame const &game) override {
     // if the opponent has made at least one move, add his last move to the
     // Vector with his moves so far
-    if (game->get_num_moves() > 0) {
-      std::size_t vs_move = game->get_move_locations().back();
-      m_vs_moves_so_far.emplace_back(vs_move);
+    if (!game.get_moves().empty()) {
+      std::size_t vs_move = game.get_moves().back();
+      append_move(m_vs_moves_so_far, vs_move);
     }
 
     // initialize my move
     bool is_valid = false;
     Move my_move{0, 0};
-
-    // if there is a move in memory to be made, put it in my move, and
-    // delete it from memory if it's played
-    while (!m_mem_for_next_move.empty()) {
-      // get the first node
-      Move tmp_move = m_mem_for_next_move.front();
-      // if the first node is free, make it my move
-      if (game->get_status(tmp_move.index) == EnumFacilityStatus::FREE) {
-        if (tmp_move.value > my_move.value) {
-          is_valid = true;
-          my_move = tmp_move;
-          break;
-        }
-      } else {
-        // else the first move in memory couldn't be played and if the
-        // memory is full, empty the memory as the triplet is now
-        // screwed
-        if (m_mem_for_next_move.size() == 3) {
-          m_mem_for_next_move.clear();
-        } else {
-          m_mem_for_next_move.erase(m_mem_for_next_move.begin());
-        }
-      }
-    }
-
-    // if the memory was empty, or the next move didn't get a value from
-    // memory, find the next best triplet and make it my move
-    if (!is_valid) {
-      auto [tmp_valid, tmp_move] = start_best_tripplet(game);
-      if (tmp_valid && tmp_move.value > my_move.value) {
-        is_valid = true;
-        my_move = tmp_move;
-      }
-    }
 
     // if I have made more than two moves, that means that I can now make
     // triplets, so search if there is a triplet to be made, and if the
@@ -159,6 +136,7 @@ public:
             inc_best_triplet_by_edges(game, m_vs_moves_so_far);
         if (tmp_valid) {
           if (is_worth(tmp_move.value, my_move.value)) {
+            is_valid = true;
             my_move = {
                 tmp_move.index,
                 tmp_move.value + m_nodes[tmp_move.index]};
@@ -170,6 +148,7 @@ public:
             inc_best_triplet_by_middle(game, m_vs_moves_so_far);
         if (tmp_valid) {
           if (is_worth(tmp_move.value, my_move.value)) {
+            is_valid = true;
             my_move = {
                 tmp_move.index,
                 tmp_move.value + m_nodes[tmp_move.index]};
@@ -178,34 +157,29 @@ public:
       }
     }
 
-    // add my last move to the Vector with my moves so far
-    m_my_moves_so_far.emplace_back(my_move.index);
-
-    // if the current move is the one that I got from memory, remove it from
-    // memory
-    if (!m_mem_for_next_move.empty()) {
-      Move tmp_move = m_mem_for_next_move.front();
-      if (my_move.index == tmp_move.index) {
-        m_mem_for_next_move.erase(m_mem_for_next_move.begin());
-      }
+    if (!is_valid) {
+      throw FacilityGameException("No valid move was found");
     }
+
+    // add my last move to the Vector with my moves so far
+    append_move(m_my_moves_so_far, my_move.index);
 
     // return my next move
     return my_move.index;
   }
 
-  std::pair<bool, Move> find_best_node(FacilityGameAPI const *game) {
+  std::pair<bool, Move> find_best_node(FacilityGame const &game) {
     while (m_sorted_nodes_it != m_sorted_nodes.end()) {
       Node node = *m_sorted_nodes_it;
       ++m_sorted_nodes_it;
-      if (game->get_status(node.index) == EnumFacilityStatus::FREE) {
+      if (game.get_status(node.index) == FacilityStatus::FREE) {
         return {true, {node.index, node.value}};
       }
     }
     return {false, {0, 0}};
   }
 
-  std::pair<bool, Move> start_best_tripplet(FacilityGameAPI const *game) {
+  std::pair<bool, Move> start_best_tripplet(FacilityGame const &game) {
     std::size_t max_sum{0};
     std::size_t sum{0};
 
@@ -213,11 +187,11 @@ public:
     std::size_t a{0};
     std::size_t b{0};
     std::size_t c{0};
-    static constexpr auto FREE = EnumFacilityStatus::FREE;
+    static constexpr auto FREE = FacilityStatus::FREE;
 
     for (std::size_t i = 0; i < m_num_nodes - 4; i++) {
-      if (game->get_status(i) == FREE && game->get_status(i + 2) == FREE
-          && game->get_status(i + 4) == FREE) {
+      if (game.get_status(i) == FREE && game.get_status(i + 2) == FREE
+          && game.get_status(i + 4) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 2] + m_nodes[i + 4];
         if (sum > max_sum) {
           is_valid = true;
@@ -230,8 +204,8 @@ public:
     }
 
     for (std::size_t i = 0; i < m_num_nodes - 5; i++) {
-      if (game->get_status(i) == FREE && game->get_status(i + 2) == FREE
-          && game->get_status(i + 5) == FREE) {
+      if (game.get_status(i) == FREE && game.get_status(i + 2) == FREE
+          && game.get_status(i + 5) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 2] + m_nodes[i + 5];
         if (sum > max_sum) {
           is_valid = true;
@@ -244,8 +218,8 @@ public:
     }
 
     for (std::size_t i = 0; i < m_num_nodes - 5; i++) {
-      if (game->get_status(i) == FREE && game->get_status(i + 3) == FREE
-          && game->get_status(i + 5) == FREE) {
+      if (game.get_status(i) == FREE && game.get_status(i + 3) == FREE
+          && game.get_status(i + 5) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 3] + m_nodes[i + 5];
         if (sum > max_sum) {
           is_valid = true;
@@ -258,8 +232,8 @@ public:
     }
 
     for (std::size_t i = 0; i < m_num_nodes - 6; i++) {
-      if (game->get_status(i) == FREE && game->get_status(i + 3) == FREE
-          && game->get_status(i + 6) == FREE) {
+      if (game.get_status(i) == FREE && game.get_status(i + 3) == FREE
+          && game.get_status(i + 6) == FREE) {
         sum = m_nodes[i] + m_nodes[i + 3] + m_nodes[i + 6];
         if (sum > max_sum) {
           max_sum = sum;
@@ -281,25 +255,11 @@ public:
     std::size_t value = static_cast<std::size_t>(
         std::round(2.5 * static_cast<double>(max_sum)));
 
-    if (abc[0].index == a) {
-      m_mem_for_next_move.emplace_back(a, value);
-      m_mem_for_next_move.emplace_back(b, value);
-      m_mem_for_next_move.emplace_back(c, value);
-    } else if (abc[0].index == c) {
-      m_mem_for_next_move.emplace_back(c, value);
-      m_mem_for_next_move.emplace_back(b, value);
-      m_mem_for_next_move.emplace_back(a, value);
-    } else {
-      m_mem_for_next_move.emplace_back(abc[0].index, value);
-      m_mem_for_next_move.emplace_back(abc[1].index, value);
-      m_mem_for_next_move.emplace_back(abc[2].index, value);
-    }
-
     return {true, {abc[0].index, value}};
   }
 
   std::pair<bool, Move> inc_best_triplet_by_edges(
-      FacilityGameAPI const *game,
+      FacilityGame const &game,
       std::vector<std::size_t> const &moves_so_far) {
     std::size_t move_idx = 1;
     std::size_t first = moves_so_far[0];
@@ -340,19 +300,19 @@ public:
   }
 
   std::pair<bool, Move> computePointsForEdges(
-      FacilityGameAPI const *game,
+      FacilityGame const &game,
       std::size_t first,
       std::size_t last,
       std::size_t continuous) {
     std::size_t points;
-    static constexpr auto FREE = EnumFacilityStatus::FREE;
+    static constexpr auto FREE = FacilityStatus::FREE;
 
     bool is_valid = false;
     Move rtn_move{0, 0};
 
     // checks if it can make or increment a triplet by adding to the left
     // of the left-most node
-    if (first >= 2 && game->get_status(first - 2) == FREE) {
+    if (first >= 2 && game.get_status(first - 2) == FREE) {
       if (continuous == 2) {
         points = 3 * (m_nodes[first - 2] + m_nodes[first] + m_nodes[last]);
       } else {
@@ -363,7 +323,7 @@ public:
         rtn_move = {first - 2, points};
       }
     }
-    if (first >= 3 && game->get_status(first - 3) == FREE) {
+    if (first >= 3 && game.get_status(first - 3) == FREE) {
       if (continuous == 2) {
         points = 3 * (m_nodes[first - 3] + m_nodes[first] + m_nodes[last]);
       } else {
@@ -376,7 +336,7 @@ public:
     }
     // checks if it can make or increment a triplet by adding to the right
     // of the right-most node
-    if (last <= m_num_nodes - 3 && game->get_status(last + 2) == FREE) {
+    if (last <= m_num_nodes - 3 && game.get_status(last + 2) == FREE) {
       if (continuous == 2) {
         points = 3 * (m_nodes[first] + m_nodes[last] + m_nodes[last + 2]);
       } else {
@@ -387,7 +347,7 @@ public:
         rtn_move = {last + 2, points};
       }
     }
-    if (last <= m_num_nodes - 4 && game->get_status(last + 3) == FREE) {
+    if (last <= m_num_nodes - 4 && game.get_status(last + 3) == FREE) {
       if (continuous == 2) {
         points = 3 * (m_nodes[first] + m_nodes[last] + m_nodes[last + 3]);
       } else {
@@ -415,7 +375,7 @@ public:
    *            the facility game instance
    */
   std::pair<bool, Move> inc_best_triplet_by_middle(
-      FacilityGameAPI const *game,
+      FacilityGame const &game,
       std::vector<std::size_t> const &moves_so_far) {
     std::size_t i = 1;
     bool is_valid = false;
@@ -450,16 +410,16 @@ public:
    *            the left-most node of the right team of nodes
    */
   std::pair<bool, Move> computePointsForMiddle(
-      FacilityGameAPI const *game,
+      FacilityGame const &game,
       std::size_t first,
       std::size_t last) {
-    static constexpr auto FREE = EnumFacilityStatus::FREE;
+    static constexpr auto FREE = FacilityStatus::FREE;
 
     bool is_valid = false;
     Move rtn_move{0, 0};
     // if there is one free node between the two teams I can select only the
     // middle one
-    if (last - first == 4 && game->get_status(first + 2) == FREE) {
+    if (last - first == 4 && game.get_status(first + 2) == FREE) {
       is_valid = true;
       rtn_move = {
           first + 2,
@@ -470,8 +430,8 @@ public:
     // highest value
     else if (last - first == 5) {
       // if both FREE, select the one with the highest value
-      if (game->get_status(first + 2) == FREE
-          && game->get_status(first + 3) == FREE) {
+      if (game.get_status(first + 2) == FREE
+          && game.get_status(first + 3) == FREE) {
         is_valid = true;
         if (m_nodes[first + 2] > m_nodes[first + 3]) {
           rtn_move.index = first + 2;
@@ -480,10 +440,10 @@ public:
         }
       }
       // else select the one who is FREE (if any)
-      else if (game->get_status(first + 2) == FREE) {
+      else if (game.get_status(first + 2) == FREE) {
         is_valid = true;
         rtn_move.index = first + 2;
-      } else if (game->get_status(first + 3) == FREE) {
+      } else if (game.get_status(first + 3) == FREE) {
         is_valid = true;
         rtn_move.index = first + 3;
       }
@@ -500,8 +460,8 @@ public:
     // because of the probability that one of them might be taken by the
     // opponent
     else if (last - first == 6) {
-      if (game->get_status(first + 2) == FREE
-          && game->get_status(first + 4) == FREE) {
+      if (game.get_status(first + 2) == FREE
+          && game.get_status(first + 4) == FREE) {
         is_valid = true;
         if (m_nodes[first + 2] > m_nodes[first + 4]) {
           rtn_move.index = first + 2;
@@ -515,7 +475,7 @@ public:
                 (2 * m_nodes[first] + 3 * m_nodes[first + 2]
                  + 3 * m_nodes[first + 4] + 2 * m_nodes[last])));
       }
-      if (game->get_status(first + 3) == FREE) {
+      if (game.get_status(first + 3) == FREE) {
         std::size_t tmp_points =
             3 * (m_nodes[first] + m_nodes[first + 3] + m_nodes[last]);
         if (!is_valid || tmp_points >= rtn_move.value) {

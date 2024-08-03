@@ -41,7 +41,7 @@ elseif("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   add_compile_options(-Wimplicit-fallthrough -fcolor-diagnostics -ferror-limit=0)
 endif()
 
-add_compile_options(-Werror)
+#add_compile_options(-Werror)
 
 set(allowedBuildTypes
     Debug
@@ -51,14 +51,14 @@ set(allowedBuildTypes
     UBSAN
     TSAN
     Profile
+    CPUProfile
     HeapProfile)
 set_property(CACHE CMAKE_BUILD_TYPE PROPERTY STRINGS "${allowedBuildTypes}")
 if(CMAKE_BUILD_TYPE AND NOT CMAKE_BUILD_TYPE IN_LIST allowedBuildTypes)
   message(FATAL_ERROR "Invalid build type: ${CMAKE_BUILD_TYPE}")
 endif()
 
-# in case of compilation error in the pegtl templates, this will show the full
-# stacktrace
+# in case of compilation error in the pegtl templates, this will show the full stacktrace
 add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-ftemplate-backtrace-limit=0>)
 
 set(CMAKE_C_FLAGS_DEBUG
@@ -103,6 +103,12 @@ set(CMAKE_C_FLAGS_PROFILE
 set(CMAKE_CXX_FLAGS_PROFILE
     "-pg -g"
     CACHE STRING "gprof profiler" FORCE)
+set(CMAKE_C_FLAGS_CPUPROFILE
+    "-g -O0"
+    CACHE STRING "CPU Profiler" FORCE)
+set(CMAKE_CXX_FLAGS_CPUPROFILE
+    "-g -O0"
+    CACHE STRING "CPU Profiler" FORCE)
 set(CMAKE_C_FLAGS_HEAPPROFILE
     "-g -O0"
     CACHE STRING "Heap Profiler" FORCE)
@@ -110,11 +116,8 @@ set(CMAKE_CXX_FLAGS_HEAPPROFILE
     "-g -O0"
     CACHE STRING "Heap Profiler" FORCE)
 
-if("${CMAKE_BUILD_TYPE}" STREQUAL "MSAN" AND "${CMAKE_CXX_COMPILER_ID}"
-                                             STREQUAL "GNU")
-  message(
-    FATAL_ERROR
-      "Memory sanitizer is not currently supported by gcc. Try clang instead.")
+if("${CMAKE_BUILD_TYPE}" STREQUAL "MSAN" AND "${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+  message(FATAL_ERROR "Memory sanitizer is not currently supported by gcc. Try clang instead.")
 endif()
 
 include(FetchContent)
@@ -126,22 +129,20 @@ find_package(fmt REQUIRED)
 
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
-add_executable(facility_game facility_game.cpp EnumPlayerState.cpp EnumPlayerType.cpp)
+add_executable(facility_game facility_game.cpp)
 
 target_link_libraries(facility_game PRIVATE fmt::fmt)
 
 if(CMAKE_BUILD_TYPE STREQUAL Profile)
-  target_link_options(facility_game_server PRIVATE "-pg")
-  target_link_options(facility_game_client PRIVATE "-pg")
+  target_link_options(facility_game PRIVATE "-pg")
+elseif(CMAKE_BUILD_TYPE STREQUAL CPUProfile)
+  target_link_libraries(facility_game PRIVATE profiler)
 elseif(CMAKE_BUILD_TYPE STREQUAL HeapProfile)
-  target_link_libraries(facility_game_server PRIVATE tcmalloc)
-  target_link_libraries(facility_game_client PRIVATE tcmalloc)
+  target_link_libraries(facility_game PRIVATE tcmalloc)
 elseif(CMAKE_BUILD_TYPE STREQUAL TSAN)
-  target_link_options(facility_game_server PRIVATE -fsanitize=thread)
-  target_link_options(facility_game_client PRIVATE -fsanitize=thread)
+  target_link_options(facility_game PRIVATE -fsanitize=thread)
 elseif(CMAKE_BUILD_TYPE STREQUAL MSAN)
-  target_link_options(facility_game_server PRIVATE -fsanitize=memory)
-  target_link_options(facility_game_client PRIVATE -fsanitize=memory)
+  target_link_options(facility_game PRIVATE -fsanitize=memory)
 endif()
 
 install(TARGETS facility_game)

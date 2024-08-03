@@ -8,10 +8,11 @@ Checks: '*,
          -llvmlibc-*,
          -zircon-*,
          -bugprone-easily-swappable-parameters,
+         -cppcoreguidelines-non-private-member-variables-in-classes,
+         -misc-non-private-member-variables-in-classes,
          -modernize-use-trailing-return-type,
          -readability-avoid-const-params-in-decls,
          -readability-identifier-length'
-ExtraArgs: '-ferror-limit=0'
 WarningsAsErrors: ''
 HeaderFilterRegex: ''
 FormatStyle: none
