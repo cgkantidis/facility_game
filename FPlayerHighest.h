@@ -10,27 +10,44 @@ private:
   static constexpr char const *FIRSTNAME = "";
   static constexpr char const *LASTNAME = "";
 
+  std::size_t m_last_idx{};
+  std::vector<std::size_t> m_indices_sorted_by_node_value;
+
 public:
   explicit FPlayerHighest(Player player)
       : FPlayer(player, PLAYER_NAME, VERSION, FIRSTNAME, LASTNAME) {}
 
-  void initialize([[maybe_unused]] FacilityGame const &game) override {}
+  void initialize([[maybe_unused]] FacilityGame const &game) override {
+    auto const &nodes = game.get_nodes(); // copy
+
+    std::vector<std::pair<std::size_t, std::size_t>> idx_node(nodes.size());
+    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+      idx_node[idx] = {idx, nodes[idx]};
+    }
+
+    std::stable_sort(
+        idx_node.begin(),
+        idx_node.end(),
+        [](auto const &left, auto const &right) {
+          return left.second > right.second;
+        });
+
+    m_indices_sorted_by_node_value.resize(nodes.size());
+    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
+      m_indices_sorted_by_node_value[idx] = idx_node[idx].first;
+    }
+  }
 
   // return the next largest node available
   std::size_t next_move(FacilityGame const &game) override {
-    std::size_t max_node{};
-    std::size_t max_node_idx{};
-    auto const &nodes = game.get_nodes();
     auto const &statuses = game.get_statuses();
-    for (std::size_t idx = 0; idx < nodes.size(); ++idx) {
-      auto const &status = statuses[idx];
-      auto const &node = nodes[idx];
-      if (status == FacilityStatus::FREE && node > max_node) {
-        max_node_idx = idx;
-        max_node = node;
+    for (; m_last_idx < m_indices_sorted_by_node_value.size(); ++m_last_idx) {
+      if (statuses[m_indices_sorted_by_node_value[m_last_idx]]
+          == FacilityStatus::FREE) {
+        return m_indices_sorted_by_node_value[m_last_idx];
       }
     }
-    return max_node_idx;
+    std::unreachable();
   }
 };
 
