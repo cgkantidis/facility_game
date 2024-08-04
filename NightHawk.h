@@ -174,7 +174,10 @@ public:
         auto [tmp_valid, tmp_move] =
             inc_best_triplet_by_edges(game, m_vs_moves_so_far);
         if (tmp_valid) {
-          if (is_worth(tmp_move.value, my_move.value)) {
+          if (!is_valid
+              || is_worth(
+                  tmp_move.value + m_nodes[tmp_move.index],
+                  my_move.value)) {
 #ifdef ORIGIN_TRACKING
             origin = "block_edges";
 #endif
@@ -189,7 +192,10 @@ public:
         auto [tmp_valid, tmp_move] =
             inc_best_triplet_by_middle(game, m_vs_moves_so_far);
         if (tmp_valid) {
-          if (is_worth(tmp_move.value, my_move.value)) {
+          if (!is_valid
+              || is_worth(
+                  tmp_move.value + m_nodes[tmp_move.index],
+                  my_move.value)) {
 #ifdef ORIGIN_TRACKING
             origin = "block_middle";
 #endif
@@ -502,8 +508,8 @@ public:
       }
 
       if (is_valid) {
-        rtn_move.value =
-            2 * m_nodes[first] + 3 * m_nodes[rtn_move.index] + 2 * m_nodes[last];
+        rtn_move.value = 2 * m_nodes[first] + 3 * m_nodes[rtn_move.index]
+                         + 2 * m_nodes[last];
       }
     }
     // if there are three FREE m_nodes between the two teams, I can either
@@ -519,24 +525,6 @@ public:
         if (!is_valid || tmp_points >= rtn_move.value) {
           is_valid = true;
           rtn_move = {first + 3, tmp_points};
-        }
-      }
-      if (game.get_status(first + 2) == FREE
-          && game.get_status(first + 4) == FREE) {
-
-        auto tmp_points = static_cast<std::size_t>(
-            0.8
-            * static_cast<double>(
-                (2 * m_nodes[first] + 3 * m_nodes[first + 2]
-                 + 3 * m_nodes[first + 4] + 2 * m_nodes[last])));
-        if (!is_valid || tmp_points >= rtn_move.value) {
-          is_valid = true;
-          if (m_nodes[first + 2] > m_nodes[first + 4]) {
-            rtn_move.index = first + 2;
-          } else {
-            rtn_move.index = first + 4;
-          }
-          rtn_move.value = tmp_points;
         }
       }
     }
