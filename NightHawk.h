@@ -4,9 +4,13 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <fmt/ranges.h>
+#include <map>
 
 #include "FPlayer.h"
 #include "FacilityGameException.h"
+
+//#define ORIGIN_TRACKING
 
 struct Move {
   std::size_t index;
@@ -47,10 +51,33 @@ private:
   std::vector<std::size_t> m_vs_moves_so_far;
   std::vector<Node> m_sorted_nodes;
   std::vector<Node>::iterator m_sorted_nodes_it{};
+#ifdef ORIGIN_TRACKING
+  std::map<std::string, std::size_t> m_origins;
+#endif
 
 public:
   explicit NightHawk(Player player)
       : FPlayer(player, PLAYER_NAME, VERSION, FIRSTNAME, LASTNAME) {}
+
+#ifdef ORIGIN_TRACKING
+  ~NightHawk() override {
+    std::vector<std::pair<std::string, std::size_t>> origins(
+        m_origins.begin(),
+        m_origins.end());
+    std::sort(
+        origins.begin(),
+        origins.end(),
+        [](auto const &p1, auto const &p2) { return p1.second > p2.second; });
+    for (auto const &p : origins) {
+      fmt::println(
+          "{}: {} ({:.2f}%)",
+          p.first,
+          p.second,
+          100.0 * static_cast<double>(p.second)
+              / static_cast<double>(m_my_moves_so_far.size()));
+    }
+  }
+#endif
 
   void initialize(FacilityGame const &game) override {
     m_num_nodes = game.get_num_nodes();
@@ -86,6 +113,9 @@ public:
     // initialize my move
     bool is_valid = false;
     Move my_move{0, 0};
+#ifdef ORIGIN_TRACKING
+    std::string origin;
+#endif
 
     // if I have made more than two moves, that means that I can now make
     // triplets, so search if there is a triplet to be made, and if the
@@ -96,6 +126,9 @@ public:
         auto [tmp_valid, tmp_move] =
             inc_best_triplet_by_edges(game, m_my_moves_so_far);
         if (tmp_valid && tmp_move.value > my_move.value) {
+#ifdef ORIGIN_TRACKING
+          origin = "triplet_edges";
+#endif
           is_valid = true;
           my_move = tmp_move;
         }
@@ -104,6 +137,9 @@ public:
         auto [tmp_valid, tmp_move] =
             inc_best_triplet_by_middle(game, m_my_moves_so_far);
         if (tmp_valid && tmp_move.value > my_move.value) {
+#ifdef ORIGIN_TRACKING
+          origin = "triplet_middle";
+#endif
           is_valid = true;
           my_move = tmp_move;
         }
@@ -116,6 +152,9 @@ public:
     if (!is_valid) {
       auto [tmp_valid, tmp_move] = find_best_node(game);
       if (tmp_valid && tmp_move.value > my_move.value) {
+#ifdef ORIGIN_TRACKING
+        origin = "highest_node";
+#endif
         is_valid = true;
         my_move = tmp_move;
       }
@@ -136,6 +175,9 @@ public:
             inc_best_triplet_by_edges(game, m_vs_moves_so_far);
         if (tmp_valid) {
           if (is_worth(tmp_move.value, my_move.value)) {
+#ifdef ORIGIN_TRACKING
+            origin = "block_edges";
+#endif
             is_valid = true;
             my_move = {
                 tmp_move.index,
@@ -148,6 +190,9 @@ public:
             inc_best_triplet_by_middle(game, m_vs_moves_so_far);
         if (tmp_valid) {
           if (is_worth(tmp_move.value, my_move.value)) {
+#ifdef ORIGIN_TRACKING
+            origin = "block_middle";
+#endif
             is_valid = true;
             my_move = {
                 tmp_move.index,
@@ -163,6 +208,14 @@ public:
 
     // add my last move to the Vector with my moves so far
     append_move(m_my_moves_so_far, my_move.index);
+#ifdef ORIGIN_TRACKING
+    auto it = m_origins.find(origin);
+    if (it == m_origins.end()) {
+      m_origins[origin] = 1;
+    } else {
+      ++(it->second);
+    }
+#endif
 
     // return my next move
     return my_move.index;
