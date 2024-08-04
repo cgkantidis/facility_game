@@ -38,6 +38,53 @@ struct NodeCmp {
   }
 };
 
+struct Group {
+  std::size_t left_idx;
+  std::size_t right_idx;
+  std::size_t num_nodes;
+  std::size_t value;
+  bool blocked_left;
+  bool blocked_right;
+};
+
+void append_move_to_groups(
+    std::vector<Group> &groups,
+    std::size_t idx,
+    std::size_t node) {
+
+  // create a new group, just for this move
+  auto it = std::upper_bound(
+      groups.begin(),
+      groups.end(),
+      idx,
+      [](std::size_t value, Group const &group) {
+        return value < group.left_idx;
+      });
+  it = groups.insert(it, {idx, idx, 1, node, false, false});
+
+  // try to merge with next
+  auto next_it = std::next(it);
+  if (next_it != groups.end()) {
+    if (next_it->left_idx - it->right_idx <= 3) {
+      it->right_idx = next_it->right_idx;
+      it->num_nodes += next_it->num_nodes;
+      it->value += next_it->value;
+      groups.erase(next_it);
+    }
+  }
+
+  // try to merge with prev
+  if (it != groups.begin()) {
+    auto prev_it = std::prev(it);
+    if (it->left_idx - prev_it->right_idx <= 3) {
+      it->left_idx = prev_it->left_idx;
+      it->num_nodes += prev_it->num_nodes;
+      it->value += prev_it->value;
+      groups.erase(prev_it);
+    }
+  }
+}
+
 class NightHawk : public FPlayer {
   static constexpr char const *PLAYER_NAME = "NightHawk";
   static constexpr char const *VERSION = "1.0";
@@ -47,10 +94,15 @@ class NightHawk : public FPlayer {
 private:
   std::size_t m_num_nodes{};
   std::vector<std::size_t> m_nodes;
+  std::vector<Group> m_my_groups;
+
   std::vector<std::size_t> m_my_moves_so_far;
   std::vector<std::size_t> m_vs_moves_so_far;
   std::vector<Node> m_sorted_nodes;
   std::vector<Node>::iterator m_sorted_nodes_it{};
+  std::size_t m_old_score{};
+  std::size_t m_expected{};
+  std::string m_origin;
 #ifdef ORIGIN_TRACKING
   std::map<std::string, std::size_t> m_origins;
 #endif
@@ -103,6 +155,18 @@ public:
   }
 
   std::size_t next_move(FacilityGame const &game) override {
+#ifdef ORIGIN_TRACKING
+    std::size_t new_score = game.get_score(m_player);
+    if (m_old_score != 0 && new_score - m_old_score != m_expected) {
+      fmt::println(
+          "Expected {} but Gained {} ({})",
+          m_expected,
+          new_score - m_old_score,
+          m_origin);
+    }
+    m_old_score = new_score;
+#endif
+
     // if the opponent has made at least one move, add his last move to the
     // Vector with his moves so far
     if (!game.get_moves().empty()) {
@@ -113,9 +177,6 @@ public:
     // initialize my move
     bool is_valid = false;
     Move my_move{0, 0};
-#ifdef ORIGIN_TRACKING
-    std::string origin;
-#endif
 
     // if I have made more than two moves, that means that I can now make
     // triplets, so search if there is a triplet to be made, and if the
@@ -124,10 +185,10 @@ public:
     if (m_my_moves_so_far.size() >= 2) {
       {
         auto [tmp_valid, tmp_move] =
-            inc_best_triplet_by_edges(game, m_my_moves_so_far);
+            inc_best_triplet_by_edges(game, m_my_groups);
         if (tmp_valid && tmp_move.value > my_move.value) {
 #ifdef ORIGIN_TRACKING
-          origin = "triplet_edges";
+          m_origin = "triplet_edges";
 #endif
           is_valid = true;
           my_move = tmp_move;
@@ -135,10 +196,10 @@ public:
       }
       {
         auto [tmp_valid, tmp_move] =
-            inc_best_triplet_by_middle(game, m_my_moves_so_far);
+            inc_best_triplet_by_middle(game, m_my_groups);
         if (tmp_valid && tmp_move.value > my_move.value) {
 #ifdef ORIGIN_TRACKING
-          origin = "triplet_middle";
+          m_origin = "triplet_middle";
 #endif
           is_valid = true;
           my_move = tmp_move;
@@ -146,18 +207,14 @@ public:
       }
     }
 
-    // if no triplet was found in memory, or stored in my current move, and
-    // no triplets could be made or incremented, choose the free node with
-    // the highest value
-    if (!is_valid) {
-      auto [tmp_valid, tmp_move] = find_best_node(game);
-      if (tmp_valid && tmp_move.value > my_move.value) {
+    // choose the free node with the highest value
+    auto highest_node_move = find_best_node(game);
+    if (!is_valid || highest_node_move.value > my_move.value) {
 #ifdef ORIGIN_TRACKING
-        origin = "highest_node";
+      m_origin = "highest_node";
 #endif
-        is_valid = true;
-        my_move = tmp_move;
-      }
+      is_valid = true;
+      my_move = highest_node_move;
     }
 
     auto is_worth = [](std::size_t new_move, std::size_t old_move) {
@@ -179,7 +236,7 @@ public:
                   tmp_move.value + m_nodes[tmp_move.index],
                   my_move.value)) {
 #ifdef ORIGIN_TRACKING
-            origin = "block_edges";
+            m_origin = "block_edges";
 #endif
             is_valid = true;
             my_move = {
@@ -197,7 +254,7 @@ public:
                   tmp_move.value + m_nodes[tmp_move.index],
                   my_move.value)) {
 #ifdef ORIGIN_TRACKING
-            origin = "block_middle";
+            m_origin = "block_middle";
 #endif
             is_valid = true;
             my_move = {
@@ -212,12 +269,19 @@ public:
       throw FacilityGameException("No valid move was found");
     }
 
+    m_expected = my_move.value;
+
     // add my last move to the Vector with my moves so far
     append_move(m_my_moves_so_far, my_move.index);
+    append_move_to_groups(
+        m_my_groups,
+        my_move.index,
+        game.get_node(my_move.index));
+
 #ifdef ORIGIN_TRACKING
-    auto it = m_origins.find(origin);
+    auto it = m_origins.find(m_origin);
     if (it == m_origins.end()) {
-      m_origins[origin] = 1;
+      m_origins[m_origin] = 1;
     } else {
       ++(it->second);
     }
@@ -227,94 +291,156 @@ public:
     return my_move.index;
   }
 
-  std::pair<bool, Move> find_best_node(FacilityGame const &game) {
+  Move find_best_node(FacilityGame const &game) {
     while (m_sorted_nodes_it != m_sorted_nodes.end()) {
       Node node = *m_sorted_nodes_it;
       ++m_sorted_nodes_it;
       if (game.get_status(node.index) == FacilityStatus::FREE) {
-        return {true, {node.index, node.value}};
+        return {node.index, node.value};
       }
     }
-    return {false, {0, 0}};
+    std::unreachable();
   }
 
-  std::pair<bool, Move> start_best_tripplet(FacilityGame const &game) {
-    std::size_t max_sum{0};
-    std::size_t sum{0};
+  static std::size_t
+  compute_points_edges(Group const &group, std::size_t node) {
+    if (group.num_nodes == 1) {
+      return node;
+    }
+    if (group.num_nodes == 2) {
+      return 3 * node + 2 * group.value;
+    }
+    return 3 * node;
+  }
 
-    bool is_valid{false};
-    std::size_t a{0};
-    std::size_t b{0};
-    std::size_t c{0};
-    static constexpr auto FREE = FacilityStatus::FREE;
+  std::pair<bool, Move> inc_best_triplet_by_edges(
+      FacilityGame const &game,
+      std::vector<Group> &groups) {
+    auto const &statuses = game.get_statuses();
+    auto const &nodes = game.get_nodes();
 
-    for (std::size_t i = 0; i < m_num_nodes - 4; i++) {
-      if (game.get_status(i) == FREE && game.get_status(i + 2) == FREE
-          && game.get_status(i + 4) == FREE) {
-        sum = m_nodes[i] + m_nodes[i + 2] + m_nodes[i + 4];
-        if (sum > max_sum) {
+    bool is_valid = false;
+    Move rtn_move{0, 0};
+
+    for (auto &group : groups) {
+      if (!group.blocked_left) {
+        bool found = false;
+        if (group.left_idx > 2) {
+          std::size_t idx = group.left_idx - 2;
+          if (statuses[idx] == FacilityStatus::FREE) {
+            found = true;
+            std::size_t points = compute_points_edges(group, nodes[idx]);
+            if (!is_valid || points > rtn_move.value) {
+              is_valid = true;
+              rtn_move = {idx, points};
+            }
+          }
+        }
+        if (group.left_idx > 3) {
+          std::size_t idx = group.left_idx - 3;
+          if (statuses[idx] == FacilityStatus::FREE) {
+            found = true;
+            std::size_t points = compute_points_edges(group, nodes[idx]);
+            if (!is_valid || points > rtn_move.value) {
+              is_valid = true;
+              rtn_move = {idx, points};
+            }
+          }
+        }
+        if (!found) {
+          group.blocked_left = true;
+        }
+      }
+
+      if (!group.blocked_right) {
+        bool found = false;
+        if (nodes.size() - group.right_idx > 2) {
+          std::size_t idx = group.right_idx + 2;
+          if (statuses[idx] == FacilityStatus::FREE) {
+            found = true;
+            std::size_t points = compute_points_edges(group, nodes[idx]);
+            if (!is_valid || points > rtn_move.value) {
+              is_valid = true;
+              rtn_move = {idx, points};
+            }
+          }
+        }
+        if (nodes.size() - group.left_idx > 3) {
+          std::size_t idx = group.left_idx + 3;
+          if (statuses[idx] == FacilityStatus::FREE) {
+            found = true;
+            std::size_t points = compute_points_edges(group, nodes[idx]);
+            if (!is_valid || points > rtn_move.value) {
+              is_valid = true;
+              rtn_move = {idx, points};
+            }
+          }
+        }
+        if (!found) {
+          group.blocked_right = true;
+        }
+      }
+    }
+
+    return {is_valid, rtn_move};
+  }
+
+  static std::size_t compute_points_middle(
+      Group const &left,
+      Group const &right,
+      std::size_t node) {
+    if (left.num_nodes > 2 && right.num_nodes > 2) {
+      return 3 * node;
+    }
+    if (left.num_nodes > 2) {
+      return 3 * node + 2 * right.value;
+    }
+    if (right.num_nodes > 2) {
+      return 2 * left.value + 3 * node;
+    }
+    return 2 * (left.value + right.value) + 3 * node;
+  }
+
+  std::pair<bool, Move> inc_best_triplet_by_middle(
+      FacilityGame const &game,
+      std::vector<Group> const &groups) {
+    auto const &nodes = game.get_nodes();
+
+    bool is_valid = false;
+    Move rtn_move{0, 0};
+
+    for (std::size_t group_idx = 1; group_idx < groups.size(); ++group_idx) {
+      Group const &left = groups[group_idx - 1];
+      Group const &right = groups[group_idx];
+
+      if (left.blocked_right || right.blocked_left) {
+        continue;
+      }
+
+      std::size_t diff = right.left_idx - left.right_idx;
+      if (diff > 6) {
+        continue;
+      }
+
+      if (diff == 6 || diff == 4) {
+        std::size_t idx = left.right_idx + diff / 2;
+        std::size_t points = compute_points_middle(left, right, nodes[idx]);
+        if (!is_valid || points > rtn_move.value) {
           is_valid = true;
-          max_sum = sum;
-          a = i;
-          b = i + 2;
-          c = i + 4;
+          rtn_move = {idx, points};
+        }
+      } else if (diff == 5) {
+        for (std::size_t idx : {left.right_idx + 2, left.right_idx + 3}) {
+          std::size_t points = compute_points_middle(left, right, nodes[idx]);
+          if (!is_valid || points > rtn_move.value) {
+            is_valid = true;
+            rtn_move = {idx, points};
+          }
         }
       }
     }
 
-    for (std::size_t i = 0; i < m_num_nodes - 5; i++) {
-      if (game.get_status(i) == FREE && game.get_status(i + 2) == FREE
-          && game.get_status(i + 5) == FREE) {
-        sum = m_nodes[i] + m_nodes[i + 2] + m_nodes[i + 5];
-        if (sum > max_sum) {
-          is_valid = true;
-          max_sum = sum;
-          a = i;
-          b = i + 2;
-          c = i + 5;
-        }
-      }
-    }
-
-    for (std::size_t i = 0; i < m_num_nodes - 5; i++) {
-      if (game.get_status(i) == FREE && game.get_status(i + 3) == FREE
-          && game.get_status(i + 5) == FREE) {
-        sum = m_nodes[i] + m_nodes[i + 3] + m_nodes[i + 5];
-        if (sum > max_sum) {
-          is_valid = true;
-          max_sum = sum;
-          a = i;
-          b = i + 3;
-          c = i + 5;
-        }
-      }
-    }
-
-    for (std::size_t i = 0; i < m_num_nodes - 6; i++) {
-      if (game.get_status(i) == FREE && game.get_status(i + 3) == FREE
-          && game.get_status(i + 6) == FREE) {
-        sum = m_nodes[i] + m_nodes[i + 3] + m_nodes[i + 6];
-        if (sum > max_sum) {
-          max_sum = sum;
-          a = i;
-          b = i + 3;
-          c = i + 6;
-        }
-      }
-    }
-
-    if (!is_valid) {
-      return {false, {0, 0}};
-    }
-
-    std::array<Node, 3> abc{
-        {{a, m_nodes[a]}, {b, m_nodes[b]}, {c, m_nodes[c]}}};
-    std::ranges::sort(abc, NodeCmp());
-
-    std::size_t value = static_cast<std::size_t>(
-        std::round(2.5 * static_cast<double>(max_sum)));
-
-    return {true, {abc[0].index, value}};
+    return {is_valid, rtn_move};
   }
 
   std::pair<bool, Move> inc_best_triplet_by_edges(
@@ -420,19 +546,6 @@ public:
     return {is_valid, rtn_move};
   }
 
-  /**
-   * Try to increment two nodes, separated by 1 free, 2 free or 3 free nodes.
-   * In case of 1 free node, this node is selected. In case of 2 nodes, the
-   * node with the highest value is selected. In case of 3 nodes, the middle
-   * (2nd) node is selected (resulting in a triplet) if the points to be given
-   * are more that 0.8 of the points to be given by selecting the 1st and and
-   * 3rd nodes. That weigh in the values is because by selecting the 1st and
-   * 2nd nodes, the triplet might be stopped by the opponent in the next
-   * round, so this represents the risk to be taken.
-   *
-   * @param game
-   *            the facility game instance
-   */
   std::pair<bool, Move> inc_best_triplet_by_middle(
       FacilityGame const &game,
       std::vector<std::size_t> const &moves_so_far) {

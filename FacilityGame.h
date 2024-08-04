@@ -5,10 +5,8 @@
 #include <fmt/base.h>
 #include <random>
 #include <ranges>
-#include <utility>
 
 #include "FacilityGameException.h"
-#include "GameScore.h"
 #include "enums.h"
 
 static constexpr std::size_t MIN_VALUE = 10;
@@ -23,8 +21,6 @@ private:
   std::vector<FacilityStatus> m_statuses;
   std::vector<std::size_t> m_moves;
 
-  bool m_is_score_uptodate{};
-  GameScore m_score;
   // player_A plays first, player_B plays second
 
 public:
@@ -63,9 +59,8 @@ public:
     return m_statuses;
   }
 
-  [[nodiscard]] GameScore get_score() {
-    update_score();
-    return m_score;
+  [[nodiscard]] std::size_t get_score(Player const &player) const {
+    return compute_score(player);
   }
 
   [[nodiscard]] bool is_finished() const {
@@ -128,21 +123,10 @@ public:
       }
     }
 
-    m_is_score_uptodate = false;
     return true;
   }
 
 private:
-  void update_score() {
-    if (m_is_score_uptodate) {
-      return;
-    }
-    for (auto const &player : {Player::PLAYER_A, Player::PLAYER_B}) {
-      m_score.set_score(player, compute_score(player));
-    }
-    m_is_score_uptodate = true;
-  }
-
   [[nodiscard]] std::size_t compute_score(Player player) const {
     FacilityStatus const search_status = player == Player::PLAYER_A
                                              ? FacilityStatus::PLAYER_A
@@ -178,11 +162,16 @@ private:
 
 public:
   void print_score() {
-    update_score();
-    fmt::println(
-        "SCORE: PLAYER_A:{} PLAYER_B:{}",
-        m_score.get_score(Player::PLAYER_A),
-        m_score.get_score(Player::PLAYER_B));
+    auto score_A = compute_score(Player::PLAYER_A);
+    auto score_B = compute_score(Player::PLAYER_B);
+    fmt::println("SCORE: PLAYER_A:{} PLAYER_B:{}", score_A, score_B);
+    if (score_A > score_B) {
+      fmt::println("PLAYER_A WINS BY {} POINTS!", score_A - score_B);
+    } else if (score_B > score_A) {
+      fmt::println("PLAYER_B WINS BY {} POINTS!", score_B - score_A);
+    } else {
+      fmt::println("IT'S A DRAW!");
+    }
   }
 
   void print_score_calculation() const {
