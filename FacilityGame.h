@@ -174,6 +174,21 @@ public:
     }
   }
 
+  void print_board() const {
+    for (std::size_t idx = 0; idx < m_nodes.size(); ++idx) {
+      fmt::print("{:2d} ", idx);
+    }
+    fmt::println("");
+    for (std::size_t const &node : m_nodes) {
+      fmt::print("{:2d} ", node);
+    }
+    fmt::println("");
+    for (std::size_t idx = 0; idx < m_nodes.size(); ++idx) {
+      fmt::print(" {} ", status_to_str_short(m_statuses[idx]));
+    }
+    fmt::println("\n");
+  }
+
   void print_score_calculation() const {
     for (auto player : {Player::PLAYER_A, Player::PLAYER_B}) {
       std::string detailed;

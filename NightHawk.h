@@ -3,14 +3,13 @@
 
 #include <algorithm>
 #include <array>
-#include <cmath>
 #include <fmt/ranges.h>
 #include <map>
 
 #include "FPlayer.h"
 #include "FacilityGameException.h"
 
-//#define ORIGIN_TRACKING
+#define ORIGIN_TRACKING
 
 struct Move {
   std::size_t index;
@@ -95,14 +94,16 @@ private:
   std::size_t m_num_nodes{};
   std::vector<std::size_t> m_nodes;
   std::vector<Group> m_my_groups;
+  std::vector<Group> m_vs_groups;
 
-  std::vector<std::size_t> m_my_moves_so_far;
-  std::vector<std::size_t> m_vs_moves_so_far;
   std::vector<Node> m_sorted_nodes;
   std::vector<Node>::iterator m_sorted_nodes_it{};
   std::size_t m_old_score{};
   std::size_t m_expected{};
   std::string m_origin;
+  std::size_t m_num_my_moves{};
+  std::size_t m_num_vs_moves{};
+
 #ifdef ORIGIN_TRACKING
   std::map<std::string, std::size_t> m_origins;
 #endif
@@ -126,7 +127,7 @@ public:
           p.first,
           p.second,
           100.0 * static_cast<double>(p.second)
-              / static_cast<double>(m_my_moves_so_far.size()));
+              / static_cast<double>(m_num_my_moves));
     }
   }
 #endif
@@ -134,10 +135,7 @@ public:
   void initialize(FacilityGame const &game) override {
     m_num_nodes = game.get_num_nodes();
     m_nodes = game.get_nodes();
-    m_my_moves_so_far.reserve(m_num_nodes);
-    m_vs_moves_so_far.reserve(m_num_nodes);
     m_sorted_nodes.reserve(m_num_nodes);
-    m_sorted_nodes_it = m_sorted_nodes.begin();
 
     for (std::size_t idx = 0; idx < m_num_nodes; ++idx) {
       m_sorted_nodes.emplace_back(idx, m_nodes[idx]);
@@ -147,11 +145,7 @@ public:
         [](Node const &n1, Node const &n2) -> bool {
           return n1.value > n2.value || n1.index < n2.index;
         });
-  }
-
-  static void append_move(std::vector<std::size_t> &moves, std::size_t idx) {
-    auto it = std::lower_bound(moves.begin(), moves.end(), idx);
-    moves.insert(it, idx);
+    m_sorted_nodes_it = m_sorted_nodes.begin();
   }
 
   std::size_t next_move(FacilityGame const &game) override {
@@ -159,7 +153,8 @@ public:
     std::size_t new_score = game.get_score(m_player);
     if (m_old_score != 0 && new_score - m_old_score != m_expected) {
       fmt::println(
-          "Expected {} but Gained {} ({})",
+          "On move {} expected {} but gained {} ({})",
+          m_num_my_moves,
           m_expected,
           new_score - m_old_score,
           m_origin);
@@ -170,8 +165,9 @@ public:
     // if the opponent has made at least one move, add his last move to the
     // Vector with his moves so far
     if (!game.get_moves().empty()) {
+      ++m_num_vs_moves;
       std::size_t vs_move = game.get_moves().back();
-      append_move(m_vs_moves_so_far, vs_move);
+      append_move_to_groups(m_vs_groups, vs_move, m_nodes[vs_move]);
     }
 
     // initialize my move
@@ -182,7 +178,7 @@ public:
     // triplets, so search if there is a triplet to be made, and if the
     // points it gives are higher that those of the current move, change my
     // move
-    if (m_my_moves_so_far.size() >= 2) {
+    if (m_num_my_moves >= 2) {
       {
         auto [tmp_valid, tmp_move] =
             inc_best_triplet_by_edges(game, m_my_groups);
@@ -209,7 +205,7 @@ public:
 
     // choose the free node with the highest value
     auto highest_node_move = find_best_node(game);
-    if (!is_valid || highest_node_move.value > my_move.value) {
+    if (highest_node_move.value > my_move.value) {
 #ifdef ORIGIN_TRACKING
       m_origin = "highest_node";
 #endif
@@ -226,13 +222,12 @@ public:
     // now make triplets, so search if there is a triplet to be made, and if
     // the points it gives are higher that those of the current move, change
     // my move to block his move
-    if (m_my_moves_so_far.size() >= 2) {
+    if (m_num_vs_moves >= 2) {
       {
         auto [tmp_valid, tmp_move] =
-            inc_best_triplet_by_edges(game, m_vs_moves_so_far);
+            inc_best_triplet_by_edges(game, m_vs_groups);
         if (tmp_valid) {
-          if (!is_valid
-              || is_worth(
+          if (is_worth(
                   tmp_move.value + m_nodes[tmp_move.index],
                   my_move.value)) {
 #ifdef ORIGIN_TRACKING
@@ -247,10 +242,9 @@ public:
       }
       {
         auto [tmp_valid, tmp_move] =
-            inc_best_triplet_by_middle(game, m_vs_moves_so_far);
+            inc_best_triplet_by_middle(game, m_vs_groups);
         if (tmp_valid) {
-          if (!is_valid
-              || is_worth(
+          if (is_worth(
                   tmp_move.value + m_nodes[tmp_move.index],
                   my_move.value)) {
 #ifdef ORIGIN_TRACKING
@@ -272,7 +266,7 @@ public:
     m_expected = my_move.value;
 
     // add my last move to the Vector with my moves so far
-    append_move(m_my_moves_so_far, my_move.index);
+    ++m_num_my_moves;
     append_move_to_groups(
         m_my_groups,
         my_move.index,
@@ -291,6 +285,7 @@ public:
     return my_move.index;
   }
 
+private:
   Move find_best_node(FacilityGame const &game) {
     while (m_sorted_nodes_it != m_sorted_nodes.end()) {
       Node node = *m_sorted_nodes_it;
@@ -325,7 +320,7 @@ public:
     for (auto &group : groups) {
       if (!group.blocked_left) {
         bool found = false;
-        if (group.left_idx > 2) {
+        if (group.left_idx >= 2) {
           std::size_t idx = group.left_idx - 2;
           if (statuses[idx] == FacilityStatus::FREE) {
             found = true;
@@ -336,7 +331,7 @@ public:
             }
           }
         }
-        if (group.left_idx > 3) {
+        if (group.left_idx >= 3) {
           std::size_t idx = group.left_idx - 3;
           if (statuses[idx] == FacilityStatus::FREE) {
             found = true;
@@ -440,207 +435,6 @@ public:
       }
     }
 
-    return {is_valid, rtn_move};
-  }
-
-  std::pair<bool, Move> inc_best_triplet_by_edges(
-      FacilityGame const &game,
-      std::vector<std::size_t> const &moves_so_far) {
-    std::size_t move_idx = 1;
-    std::size_t first = moves_so_far[0];
-    std::size_t continuous = 1;
-
-    bool is_valid = false;
-    Move rtn_move{0, 0};
-
-    while (move_idx < moves_so_far.size()) {
-      if (moves_so_far[move_idx] - moves_so_far[move_idx - 1] <= 3) {
-        continuous++;
-      } else {
-        if (continuous >= 2) {
-          std::size_t last = moves_so_far[move_idx - 1];
-          auto [tmp_valid, tmp_move] =
-              computePointsForEdges(game, first, last, continuous);
-          if (tmp_valid && tmp_move.value > rtn_move.value) {
-            is_valid = true;
-            rtn_move = tmp_move;
-          }
-        }
-        first = moves_so_far[move_idx];
-        continuous = 1;
-      }
-      move_idx++;
-    }
-    if (continuous >= 2) {
-      std::size_t last = moves_so_far[move_idx - 1];
-      auto [tmp_valid, tmp_move] =
-          computePointsForEdges(game, first, last, continuous);
-      if (tmp_valid && tmp_move.value > rtn_move.value) {
-        is_valid = true;
-        rtn_move = tmp_move;
-      }
-    }
-
-    return {is_valid, rtn_move};
-  }
-
-  std::pair<bool, Move> computePointsForEdges(
-      FacilityGame const &game,
-      std::size_t first,
-      std::size_t last,
-      std::size_t continuous) {
-    std::size_t points;
-    static constexpr auto FREE = FacilityStatus::FREE;
-
-    bool is_valid = false;
-    Move rtn_move{0, 0};
-
-    // checks if it can make or increment a triplet by adding to the left
-    // of the left-most node
-    if (first >= 2 && game.get_status(first - 2) == FREE) {
-      if (continuous == 2) {
-        points = 3 * m_nodes[first - 2] + 2 * (m_nodes[first] + m_nodes[last]);
-      } else {
-        points = 3 * m_nodes[first - 2];
-      }
-      if (points > rtn_move.value) {
-        is_valid = true;
-        rtn_move = {first - 2, points};
-      }
-    }
-    if (first >= 3 && game.get_status(first - 3) == FREE) {
-      if (continuous == 2) {
-        points = 3 * m_nodes[first - 3] + 2 * (m_nodes[first] + m_nodes[last]);
-      } else {
-        points = 3 * m_nodes[first - 3];
-      }
-      if (points > rtn_move.value) {
-        is_valid = true;
-        rtn_move = {first - 3, points};
-      }
-    }
-    // checks if it can make or increment a triplet by adding to the right
-    // of the right-most node
-    if (last <= m_num_nodes - 3 && game.get_status(last + 2) == FREE) {
-      if (continuous == 2) {
-        points = 2 * (m_nodes[first] + m_nodes[last]) + 3 * m_nodes[last + 2];
-      } else {
-        points = 3 * m_nodes[last + 2];
-      }
-      if (points > rtn_move.value) {
-        is_valid = true;
-        rtn_move = {last + 2, points};
-      }
-    }
-    if (last <= m_num_nodes - 4 && game.get_status(last + 3) == FREE) {
-      if (continuous == 2) {
-        points = 2 * (m_nodes[first] + m_nodes[last]) + 3 * m_nodes[last + 3];
-      } else {
-        points = 3 * m_nodes[last + 3];
-      }
-      if (points > rtn_move.value) {
-        is_valid = true;
-        rtn_move = {last + 3, points};
-      }
-    }
-    return {is_valid, rtn_move};
-  }
-
-  std::pair<bool, Move> inc_best_triplet_by_middle(
-      FacilityGame const &game,
-      std::vector<std::size_t> const &moves_so_far) {
-    std::size_t i = 1;
-    bool is_valid = false;
-    Move rtn_move{0, 0};
-
-    while (i < moves_so_far.size()) {
-      std::size_t space = moves_so_far[i] - moves_so_far[i - 1];
-      if (space >= 4 && space <= 6) {
-        std::size_t first = moves_so_far[i - 1];
-        std::size_t last = moves_so_far[i];
-        auto [tmp_valid, tmp_move] = computePointsForMiddle(game, first, last);
-        if (tmp_valid && tmp_move.value > rtn_move.value) {
-          is_valid = true;
-          rtn_move = tmp_move;
-        }
-      }
-      i++;
-    }
-
-    return {is_valid, rtn_move};
-  }
-
-  /**
-   * Calculates the point that will be gained if I connect two teams of nodes
-   * by choosing one of the nodes between the teams
-   *
-   * @param game
-   *            the facility game instance
-   * @param first
-   *            the right-most node of the left team of nodes
-   * @param last
-   *            the left-most node of the right team of nodes
-   */
-  std::pair<bool, Move> computePointsForMiddle(
-      FacilityGame const &game,
-      std::size_t first,
-      std::size_t last) {
-    static constexpr auto FREE = FacilityStatus::FREE;
-
-    bool is_valid = false;
-    Move rtn_move{0, 0};
-    // if there is one free node between the two teams I can select only the
-    // middle one
-    if (last - first == 4 && game.get_status(first + 2) == FREE) {
-      is_valid = true;
-      rtn_move = {
-          first + 2,
-          2 * m_nodes[first] + 3 * m_nodes[first + 2] + 2 * m_nodes[last]};
-    }
-    // if there are two FREE m_nodes between the two teams I can create a new
-    // bigger team by selecting anyone of them, so I select the one with the
-    // highest value
-    else if (last - first == 5) {
-      // if both FREE, select the one with the highest value
-      if (game.get_status(first + 2) == FREE
-          && game.get_status(first + 3) == FREE) {
-        is_valid = true;
-        if (m_nodes[first + 2] > m_nodes[first + 3]) {
-          rtn_move.index = first + 2;
-        } else {
-          rtn_move.index = first + 3;
-        }
-      }
-      // else select the one who is FREE (if any)
-      else if (game.get_status(first + 2) == FREE) {
-        is_valid = true;
-        rtn_move.index = first + 2;
-      } else if (game.get_status(first + 3) == FREE) {
-        is_valid = true;
-        rtn_move.index = first + 3;
-      }
-
-      if (is_valid) {
-        rtn_move.value = 2 * m_nodes[first] + 3 * m_nodes[rtn_move.index]
-                         + 2 * m_nodes[last];
-      }
-    }
-    // if there are three FREE m_nodes between the two teams, I can either
-    // select the middle one and combine the two teams, or select the left
-    // or right and combine the two teams on the next round
-    // the left/right m_nodes are computed with a weight in their points
-    // because of the probability that one of them might be taken by the
-    // opponent
-    else if (last - first == 6) {
-      if (game.get_status(first + 3) == FREE) {
-        std::size_t tmp_points =
-            2 * m_nodes[first] + 3 * m_nodes[first + 3] + 2 * m_nodes[last];
-        if (!is_valid || tmp_points >= rtn_move.value) {
-          is_valid = true;
-          rtn_move = {first + 3, tmp_points};
-        }
-      }
-    }
     return {is_valid, rtn_move};
   }
 };

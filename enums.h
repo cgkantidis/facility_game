@@ -26,6 +26,24 @@ static constexpr char const *player_to_str(Player player) {
   std::unreachable();
 }
 
+static constexpr char const *status_to_str_short(FacilityStatus status) {
+  switch (status) {
+  case FacilityStatus::FREE: {
+    return " ";
+  }
+  case FacilityStatus::BLOCKED: {
+    return " ";
+  }
+  case FacilityStatus::PLAYER_A: {
+    return "A";
+  }
+  case FacilityStatus::PLAYER_B: {
+    return "B";
+  }
+  }
+  std::unreachable();
+}
+
 static constexpr char const *status_to_str(FacilityStatus status) {
   switch (status) {
   case FacilityStatus::FREE: {
