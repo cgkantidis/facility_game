@@ -35,6 +35,13 @@ public:
     });
   }
 
+  void clear() {
+    for (auto &status : m_statuses) {
+      status = FacilityStatus::FREE;
+    }
+    m_moves.clear();
+  }
+
   [[nodiscard]] std::size_t get_num_nodes() const {
     return m_nodes.size();
   }
